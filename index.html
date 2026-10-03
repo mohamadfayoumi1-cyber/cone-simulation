@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Collaborative Training Cone System – simulation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F3F5F4;--panel:#FFFFFF;--pad:#E4E8E6;--grid:#C9D0CD;--ink:#16211F;--muted:#55625F;
+  --teal:#0F5966;--teal-soft:#DCEBEC;--cone:#E8641B;--danger:#B3261E;--danger-soft:#FBE4E1;
+  --ok:#1E6B3A;--ok-soft:#DDF0E3;--assign:#5B4FC4;--line:#D3DAD7;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#101615;--panel:#18201F;--pad:#1F2927;--grid:#33403D;--ink:#E8EEEC;--muted:#9AA8A4;
+  --teal:#5FB3BF;--teal-soft:#1B3438;--cone:#F07A33;--danger:#F28B82;--danger-soft:#3A1D1A;
+  --ok:#7FCB97;--ok-soft:#173222;--assign:#A79EF0;--line:#2C3735;}}
+:root[data-theme="dark"]{
+  --bg:#101615;--panel:#18201F;--pad:#1F2927;--grid:#33403D;--ink:#E8EEEC;--muted:#9AA8A4;
+  --teal:#5FB3BF;--teal-soft:#1B3438;--cone:#F07A33;--danger:#F28B82;--danger-soft:#3A1D1A;
+  --ok:#7FCB97;--ok-soft:#173222;--assign:#A79EF0;--line:#2C3735;}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.5}
+main{max-width:980px;margin:0 auto;padding:20px 16px 32px}
+h1{font-family:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;font-weight:600;font-size:clamp(28px,5vw,40px);line-height:1.05;margin:0 0 6px;color:var(--teal)}
+.sub{color:var(--muted);margin:0 0 18px;max-width:68ch}
+.controls{display:grid;gap:10px;margin-bottom:12px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.lab{font-size:14px;color:var(--muted);min-width:70px}
+button,select{font:inherit;font-size:15px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 12px;min-height:40px;cursor:pointer}
+button:hover{border-color:var(--teal)}
+button:focus-visible,select:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+button.on{background:var(--teal-soft);border-color:var(--teal);color:var(--teal);font-weight:500}
+button.stop{color:var(--danger);border-color:var(--danger);font-weight:600}
+.spacer{margin-left:auto}
+.stage{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px}
+canvas{display:block;width:100%;height:auto;border-radius:6px}
+#ready{display:none;margin:10px 0 0;padding:12px 16px;border-radius:8px;background:var(--ok-soft);color:var(--ok);font-weight:600;font-size:17px}
+#status{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:10px;padding:10px 14px;border-radius:8px;background:var(--panel);border:1px solid var(--line);font-size:15px}
+#clock{font-variant-numeric:tabular-nums;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;font-size:14px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:14px;border-radius:50%;display:inline-block}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main>
+<h1>Collaborative Training Cone System</h1>
+<p class="sub">Top-down simulation of six self-driving cones on a 30 × 16 m training pad. Choose an exercise, check the assignment preview, then execute. The cones drive together, give way to each other and report READY once settled.</p>
+
+<div class="controls">
+  <div class="row"><span class="lab">Exercise</span>
+    <button data-l="slalom">Slalom</button>
+    <button data-l="parking">Parallel parking</button>
+    <button data-l="square">Square (4 cones)</button>
+    <button data-l="lane">Lane change</button>
+    <button data-l="circle">Circle</button>
+    <button data-l="gather">Gather</button>
+  </div>
+  <div class="row"><span class="lab">Control</span>
+    <button id="exec">Execute</button>
+    <button id="estop" class="stop">E-stop</button>
+    <button id="knock">Car hits a cone</button>
+    <button id="fix" style="display:none">Set upright and re-deploy</button>
+    <button id="veh">Vehicle on pad: off</button>
+    <span class="spacer lab" style="min-width:0">Speed</span>
+    <select id="spd" aria-label="Playback speed"><option value="1">1x</option><option value="2" selected>2x</option><option value="4">4x</option></select>
+  </div>
+</div>
+
+<div class="stage"><canvas id="cv" aria-label="Training pad with self-driving cones"></canvas></div>
+<div id="ready">READY: all cones in position and settled. The exercise may begin.</div>
+<div id="status"><span id="msg">Choose an exercise to preview the assignment.</span><span id="clock">t = 0.0 s</span></div>
+
+<div class="legend">
+  <span><i class="sw" style="background:var(--cone)"></i>Cone (number above, heading line)</span>
+  <span><i class="sw" style="background:var(--assign)"></i>Assignment preview</span>
+  <span><i class="sw" style="background:var(--danger)"></i>Tipped cone</span>
+  <span><i class="sw" style="border:2px dashed var(--teal)"></i>Geofence</span>
+</div>
+</main>
+
+<script>
+(function(){
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const PW=30,PH=16;let W=680,H=363,S=W/PW;
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function resize(){const w=cv.parentElement.clientWidth-16;W=Math.max(300,w);H=Math.round(W*PH/PW);S=W/PW;
+  const dpr=window.devicePixelRatio||1;cv.width=W*dpr;cv.height=H*dpr;cv.style.height=H+'px';ctx.setTransform(dpr,0,0,dpr,0,0)}
+window.addEventListener('resize',resize);resize();
+
+const VMAX=0.8,VNEAR=0.3,R=0.6;
+const gatherPts=[...Array(6)].map((_,i)=>[1.6+i*1.1,14.6]);
+const L={
+  slalom:{pts:[4,8.6,13.2,17.8,22.4,27].map(x=>[x,8]),name:'Slalom'},
+  parking:{pts:[[12,6],[18,6],[12,8.5],[18,8.5],[6,6],[24,6]],name:'Parallel parking'},
+  square:{pts:[[12.5,5.5],[17.5,5.5],[12.5,10.5],[17.5,10.5]],name:'Square 5 × 5 m'},
+  lane:{pts:[[5,6],[5,9],[14,3.5],[14,6.5],[23,6],[23,9]],name:'Lane change'},
+  circle:{pts:[...Array(6)].map((_,i)=>[15+5*Math.cos(i*Math.PI/3),8+5*Math.sin(i*Math.PI/3)]),name:'Circle r = 5 m'},
+  gather:{pts:gatherPts,name:'Gather'}
+};
+let cones=gatherPts.map((p,i)=>({id:i+1,x:p[0],y:p[1],th:-Math.PI/2,vx:0,vy:0,tx:null,ty:null,state:'idle',settle:0}));
+let mode='idle',sel=null,assign=null,t=0,t0=0,elapsed=0,estop=false,veh=false,tipped=null;
+
+function perms(a){if(a.length<=1)return[a];const r=[];a.forEach((x,i)=>perms(a.slice(0,i).concat(a.slice(i+1))).forEach(p=>r.push([x].concat(p))));return r}
+const P6=perms([0,1,2,3,4,5]);
+function solve(pts){let best=null,bm=1e9,bs=1e9;
+  for(const p of P6){let m=0,s=0;for(let k=0;k<pts.length;k++){const c=cones[p[k]];const d=Math.hypot(c.x-pts[k][0],c.y-pts[k][1]);m=Math.max(m,d);s+=d}
+    if(m<bm-1e-6||(Math.abs(m-bm)<1e-6&&s<bs)){bm=m;bs=s;best=p}}
+  return{p:best,max:bm}}
+
+const $=id=>document.getElementById(id);
+const msg=s=>$('msg').textContent=s;
+const readyEl=$('ready');
+
+function choose(k){
+  if(estop){msg('E-stop is active. Press Resume first.');return}
+  sel=k;const pts=L[k].pts;const r=solve(pts);assign=r.p;mode='preview';readyEl.style.display='none';elapsed=0;
+  document.querySelectorAll('[data-l]').forEach(b=>b.classList.toggle('on',b.dataset.l===k));
+  msg(`Preview: ${L[k].name}, ${pts.length} cones needed, 6 available. Longest trip ${r.max.toFixed(1)} m, ETA about ${Math.round(r.max/0.7+2)} s. Press Execute.`);
+}
+document.querySelectorAll('[data-l]').forEach(b=>b.onclick=()=>choose(b.dataset.l));
+
+$('exec').onclick=()=>{
+  if(mode!=='preview'){msg('Choose an exercise first.');return}
+  if(veh){msg('Blocked: the vehicle interlock is on. Clear the vehicle from the pad first.');return}
+  const pts=L[sel].pts;cones.forEach(c=>{if(c.state!=='tipped'){c.tx=null;c.ty=null;c.state='idle'}});
+  assign.forEach((ci,k)=>{if(k<pts.length){const c=cones[ci];c.tx=pts[k][0];c.ty=pts[k][1];c.state='moving';c.settle=0}});
+  mode='moving';t0=t;msg(`Deploying ${L[sel].name}. Cones drive simultaneously and give way to each other.`);
+};
+
+$('estop').onclick=()=>{estop=!estop;$('estop').textContent=estop?'Resume':'E-stop';
+  cones.forEach(c=>{c.vx=0;c.vy=0});msg(estop?'E-stop: every cone halted instantly.':'Resumed.')};
+
+$('knock').onclick=()=>{const c=cones.find(c=>c.state==='hold');
+  if(!c){msg('Deploy an exercise first, then a car can hit a cone.');return}
+  tipped=c;c.state='tipped';c.x+=1.3;c.y+=0.9;c.vx=c.vy=0;readyEl.style.display='none';$('fix').style.display='';
+  msg(`Alert: cone ${c.id} tipped. Motors cut within 1 s. The instructor sets it upright by hand.`)};
+
+$('fix').onclick=()=>{if(!tipped)return;tipped.state='moving';tipped.settle=0;$('fix').style.display='none';mode='moving';t0=t;
+  msg(`Re-deploying cone ${tipped.id} only. The rest of the layout stays put.`);tipped=null};
+
+$('veh').onclick=()=>{veh=!veh;$('veh').classList.toggle('on',veh);$('veh').textContent=`Vehicle on pad: ${veh?'on':'off'}`;
+  if(veh){cones.forEach(c=>{c.vx=c.vy=0});msg('Vehicle interlock on: the fleet will not move.')}else msg('Vehicle cleared. The fleet may move.')};
+
+function step(dt){
+  if(estop||veh)return;t+=dt;
+  for(const c of cones){
+    if(c.state!=='moving')continue;
+    const dx=c.tx-c.x,dy=c.ty-c.y,d=Math.hypot(dx,dy);
+    const v=d<1?Math.max(0.08,VNEAR*Math.min(1,d/0.4)):VMAX;
+    let ux=dx/(d||1)*v,uy=dy/(d||1)*v;
+    for(const o of cones){if(o===c||o.state==='tipped')continue;
+      const ox=c.x-o.x,oy=c.y-o.y,od=Math.hypot(ox,oy);
+      if(od<2*R+0.6&&od>1e-3){const k=(2*R+0.6-od)/(2*R+0.6);const nx=ox/od,ny=oy/od;ux+=nx*k*1.2-ny*k*0.7;uy+=ny*k*1.2+nx*k*0.7}}
+    let sp=Math.hypot(ux,uy);if(sp>VMAX){ux*=VMAX/sp;uy*=VMAX/sp}
+    c.vx+=(ux-c.vx)*Math.min(1,dt*6);c.vy+=(uy-c.vy)*Math.min(1,dt*6);
+    c.x+=c.vx*dt;c.y+=c.vy*dt;
+    if(Math.hypot(c.vx,c.vy)>0.05){const want=Math.atan2(c.vy,c.vx);const e=Math.atan2(Math.sin(want-c.th),Math.cos(want-c.th));c.th+=Math.max(-3*dt,Math.min(3*dt,e))}
+    if(d<0.08){c.vx*=0.5;c.vy*=0.5;c.settle+=dt;const e=Math.atan2(Math.sin(-c.th),Math.cos(-c.th));c.th+=Math.max(-2*dt,Math.min(2*dt,e));
+      if(c.settle>1&&Math.abs(e)<0.17){c.state='hold';c.x=c.tx;c.y=c.ty;c.vx=c.vy=0}}else c.settle=0;
+  }
+  if(mode==='moving'){elapsed=t-t0;
+    if(cones.every(c=>c.state!=='moving'&&c.state!=='tipped')){mode='ready';readyEl.style.display='block';
+      msg(`${L[sel].name} formed in ${elapsed.toFixed(1)} s with zero collisions. Every cone faces the launch direction.`)}}
+}
+
+function draw(){
+  const ink=css('--ink'),mu=css('--muted'),grid=css('--grid'),pad=css('--pad'),teal=css('--teal'),cone=css('--cone'),dang=css('--danger'),asg=css('--assign');
+  ctx.clearRect(0,0,W,H);ctx.fillStyle=pad;ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle=grid;ctx.lineWidth=1;
+  for(let x=0;x<=PW;x+=5){ctx.beginPath();ctx.moveTo(x*S,0);ctx.lineTo(x*S,H);ctx.stroke()}
+  for(let y=0;y<=PH;y+=5){ctx.beginPath();ctx.moveTo(0,y*S);ctx.lineTo(W,y*S);ctx.stroke()}
+  ctx.setLineDash([6,4]);ctx.strokeStyle=teal;ctx.lineWidth=1.5;ctx.strokeRect(4,4,W-8,H-8);ctx.setLineDash([]);
+  ctx.fillStyle=mu;ctx.font='13px Barlow, system-ui, sans-serif';ctx.fillText('Pad boundary (geofence), grid 5 m',10,20);
+  ctx.strokeStyle=mu;ctx.lineWidth=1;ctx.strokeRect(0.9*S,13.8*S,6.9*S,1.6*S);ctx.fillText('Gather area',1*S,13.6*S);
+  if(veh){ctx.fillStyle='#378ADD';ctx.fillRect(24*S,11.5*S,4.4*S,1.9*S);ctx.fillStyle='#fff';ctx.fillText('Training car',24.4*S,12.7*S)}
+  if(sel){ctx.strokeStyle=mu;ctx.lineWidth=1;ctx.setLineDash([3,3]);
+    for(const p of L[sel].pts){ctx.beginPath();ctx.arc(p[0]*S,p[1]*S,0.25*S,0,Math.PI*2);ctx.stroke()}ctx.setLineDash([])}
+  if(mode==='preview'){ctx.strokeStyle=asg;ctx.lineWidth=1.8;ctx.setLineDash([5,4]);
+    assign.forEach((ci,k)=>{const p=L[sel].pts[k];if(!p)return;const c=cones[ci];ctx.beginPath();ctx.moveTo(c.x*S,c.y*S);ctx.lineTo(p[0]*S,p[1]*S);ctx.stroke()});ctx.setLineDash([])}
+  for(const c of cones){
+    const X=c.x*S,Y=c.y*S,r=Math.max(7,0.32*S),col=c.state==='tipped'?dang:cone;
+    if(c.state==='moving'&&!estop&&!veh&&Math.floor(performance.now()/250)%2){ctx.fillStyle='rgba(239,159,39,0.35)';ctx.beginPath();ctx.arc(X,Y,r*1.9,0,Math.PI*2);ctx.fill()}
+    ctx.fillStyle=col;ctx.beginPath();ctx.arc(X,Y,r,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(X,Y,r*0.55,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=col;ctx.beginPath();ctx.arc(X,Y,r*0.3,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle=ink;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(X+Math.cos(c.th)*r,Y+Math.sin(c.th)*r);ctx.lineTo(X+Math.cos(c.th)*(r+9),Y+Math.sin(c.th)*(r+9));ctx.stroke();
+    ctx.fillStyle=ink;ctx.font='600 13px Barlow, system-ui, sans-serif';ctx.fillText(c.id,X-4,Y-r-5);
+    if(c.state==='tipped'){ctx.fillStyle=dang;ctx.fillText('Tipped',X+r+4,Y+4)}
+  }
+  if(estop){ctx.fillStyle='rgba(226,75,74,0.15)';ctx.fillRect(0,0,W,H);ctx.fillStyle=dang;ctx.font='600 22px Barlow, system-ui, sans-serif';ctx.fillText('E-STOP',W/2-36,H/2)}
+  $('clock').textContent=`t = ${elapsed.toFixed(1)} s`;
+}
+
+let last=performance.now();
+function loop(now){const sp=+$('spd').value;const dt=Math.min(0.05,(now-last)/1000)*sp;last=now;
+  const n=Math.ceil(dt/0.01)||1;for(let i=0;i<n;i++)step(dt/n);draw();requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
