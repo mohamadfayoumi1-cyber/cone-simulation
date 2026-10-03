@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cone swarm – decentralized 3D simulation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#EEF1F0;--panel:#FFFFFF;--ink:#16211F;--muted:#55625F;--line:#D3DAD7;--teal:#0F5966;--teal-soft:#DCEBEC;
+--danger:#B3261E;--danger-soft:#FBE4E1;--ok:#1E6B3A;--ok-soft:#DDF0E3;--warn:#8A5A00;--warn-soft:#FBEFD5;--assign:#5B4FC4;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101615;--panel:#18201F;--ink:#E8EEEC;--muted:#9AA8A4;--line:#2C3735;
+--teal:#5FB3BF;--teal-soft:#1B3438;--danger:#F28B82;--danger-soft:#3A1D1A;--ok:#7FCB97;--ok-soft:#173222;--warn:#F2C26B;--warn-soft:#33270F;--assign:#A79EF0}}
+:root[data-theme="dark"]{--bg:#101615;--panel:#18201F;--ink:#E8EEEC;--muted:#9AA8A4;--line:#2C3735;--teal:#5FB3BF;--teal-soft:#1B3438;
+--danger:#F28B82;--danger-soft:#3A1D1A;--ok:#7FCB97;--ok-soft:#173222;--warn:#F2C26B;--warn-soft:#33270F;--assign:#A79EF0}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.45}
+header{padding:14px 16px 4px;max-width:1400px;margin:0 auto}
+h1{font-family:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;font-weight:600;font-size:clamp(24px,4vw,34px);line-height:1.05;margin:0;color:var(--teal)}
+header p{margin:4px 0 0;color:var(--muted);max-width:90ch}
+.wrap{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px;padding:12px 16px 24px;max-width:1400px;margin:0 auto}
+@media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr)}}
+.stage{position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--line);height:min(72vh,720px);min-height:380px;background:#9FB4C2;touch-action:none}
+#gl{display:block;width:100%;height:100%}
+.hud{position:absolute;left:10px;top:10px;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.chip{background:rgba(16,22,21,.78);color:#fff;padding:6px 10px;border-radius:6px;font-size:14px;width:fit-content}
+#banner{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;padding:10px 16px;border-radius:8px;font-weight:600;font-size:16px;display:none;white-space:nowrap}
+.views{position:absolute;right:10px;top:10px;display:flex;gap:6px}
+.panel{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.card h2{font-size:16px;font-weight:600;margin:0 0 8px}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px}
+label{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
+input,select{font:inherit;font-size:15px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 8px;min-height:38px;width:100%}
+button{font:inherit;font-size:15px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 12px;min-height:40px;cursor:pointer}
+button:hover{border-color:var(--teal)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+button.primary{background:var(--teal);color:#fff;border-color:var(--teal);font-weight:600}
+:root[data-theme="dark"] button.primary{color:#0b1514}
+button.danger{color:var(--danger);border-color:var(--danger)}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+#err{color:var(--danger);font-size:13px;margin-top:6px;min-height:1em}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-weight:500;color:var(--muted);padding:4px 4px;border-bottom:1px solid var(--line)}
+td{padding:5px 4px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+.pill{display:inline-block;padding:1px 7px;border-radius:999px;font-size:12px;font-weight:500}
+.p-idle{background:var(--teal-soft);color:var(--teal)}.p-moving{background:var(--warn-soft);color:var(--warn)}
+.p-holding{background:var(--ok-soft);color:var(--ok)}.p-failed{background:var(--danger-soft);color:var(--danger)}
+#log{height:230px;overflow:auto;font-size:13.5px;display:flex;flex-direction:column;gap:3px;padding-right:4px}
+#log div{border-left:3px solid var(--line);padding-left:7px}
+#log .op{border-color:#378ADD}#log .ag{border-color:var(--assign)}#log .ok{border-color:var(--ok)}#log .bad{border-color:var(--danger)}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:5px}.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+</style>
+</head>
+<body>
+<header>
+<h1>Collaborative cone swarm – decentralized simulation</h1>
+<p>The operator sends one command to one cone (the agent). The agent shares it, every cone bids for a position, they agree on roles, and each cone then drives itself using GPS. Break a cone and the rest notice, re-plan and redraw the shape. Drag to rotate, scroll or pinch to zoom.</p>
+</header>
+<div class="wrap">
+  <div class="stage" id="stage">
+    <canvas id="gl"></canvas>
+    <div class="hud"><div class="chip" id="phase">Phase: idle</div><div class="chip" id="clock">t = 0.0 s</div></div>
+    <div class="views"><button id="vOrbit">3D view</button><button id="vTop">Top view</button></div>
+    <div id="banner"></div>
+  </div>
+  <div class="panel">
+    <div class="card">
+      <h2>Operator command</h2>
+      <div class="form">
+        <label>Shape<select id="shape"><option value="square">Square</option><option value="rect">Rectangle (a × a/2)</option><option value="line">Line (slalom)</option></select></label>
+        <label>Side a (m)<input id="side" type="number" value="10" min="4" max="16" step="0.5"></label>
+        <label>Corner A x (m)<input id="ax" type="number" value="-5" step="0.5"></label>
+        <label>Corner A y (m)<input id="ay" type="number" value="-5" step="0.5"></label>
+        <label>Heading (°)<input id="hd" type="number" value="30" step="5"></label>
+        <label>Speed<select id="spd"><option value="1">1x real time</option><option value="2" selected>2x</option><option value="4">4x</option></select></label>
+      </div>
+      <div id="err"></div>
+      <div class="btns">
+        <button class="primary" id="send">Send command</button>
+        <button class="danger" id="brk">Break a cone</button>
+        <button id="fix">Repair cones</button>
+      </div>
+      <div class="btns" style="margin-top:6px">
+        <label style="flex-direction:row;align-items:center;gap:8px">Fleet<select id="n" style="width:auto"><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option></select></label>
+        <button id="reset">Reset fleet</button>
+        <button type="button" onclick="location.href='index.html'">Back to 2D</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Fleet (each cone runs its own software)</h2>
+      <table><thead><tr><th>Cone</th><th>Role</th><th>GPS</th><th>State</th></tr></thead><tbody id="tbl"></tbody></table>
+    </div>
+    <div class="card">
+      <h2>Radio log</h2>
+      <div id="log"></div>
+      <div class="legend" style="margin-top:8px">
+        <span><i class="dot" style="background:#378ADD"></i>Operator</span>
+        <span><i class="dot" style="background:#8E7CF0"></i>Bids / plan</span>
+        <span><i class="dot" style="background:#3CC6E0"></i>Heartbeat</span>
+        <span><i class="dot" style="background:#E24B4A"></i>Failure</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const stage=$('stage'),cv=$('gl');
+const renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true});
+renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+const scene=new THREE.Scene();scene.background=new THREE.Color(0xA9C0CF);scene.fog=new THREE.Fog(0xA9C0CF,60,140);
+const camera=new THREE.PerspectiveCamera(45,1,0.1,300);
+scene.add(new THREE.HemisphereLight(0xEAF2F8,0x404040,0.75));
+const sun=new THREE.DirectionalLight(0xFFF4E0,0.95);sun.position.set(18,30,8);sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-30,right:30,top:30,bottom:-30,near:1,far:80});sun.shadow.camera.updateProjectionMatrix();scene.add(sun);
+
+const PADW=36,PADH=26;
+const W2=(x,y,h=0)=>new THREE.Vector3(x,h,-y);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(160,160),new THREE.MeshStandardMaterial({color:0x3A3D41,roughness:0.97}));
+ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+const paint=new THREE.MeshStandardMaterial({color:0xEDEDE6,roughness:0.8});
+function strip(x1,y1,x2,y2,w,mat,h=0.012){const L=Math.hypot(x2-x1,y2-y1);const m=new THREE.Mesh(new THREE.PlaneGeometry(L,w),mat);
+  m.rotation.x=-Math.PI/2;m.rotation.z=Math.atan2(y2-y1,x2-x1);m.position.copy(W2((x1+x2)/2,(y1+y2)/2,h));m.receiveShadow=true;scene.add(m);return m}
+[[-18,-13,18,-13],[18,-13,18,13],[18,13,-18,13],[-18,13,-18,-13]].forEach(s=>strip(...s,0.15,paint));
+for(let x=-14;x<=14;x+=7)strip(x,-13,x,-11.5,0.12,paint);
+const grid=new THREE.GridHelper(36,18,0x5A5E63,0x4A4E52);grid.scale.set(1,1,26/36);grid.position.y=0.006;scene.add(grid);
+
+function car(x,y,rot,color){const g=new THREE.Group();const b=new THREE.Mesh(new THREE.BoxGeometry(4.2,0.8,1.8),new THREE.MeshStandardMaterial({color,roughness:0.4,metalness:0.3}));
+  b.position.y=0.65;b.castShadow=true;g.add(b);const t=new THREE.Mesh(new THREE.BoxGeometry(2.2,0.6,1.6),new THREE.MeshStandardMaterial({color:0x1E2A33,roughness:0.2,metalness:0.5}));
+  t.position.set(-0.2,1.3,0);t.castShadow=true;g.add(t);const wm=new THREE.MeshStandardMaterial({color:0x111111});
+  [[1.3,0.9],[1.3,-0.9],[-1.3,0.9],[-1.3,-0.9]].forEach(p=>{const w=new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.35,0.25,16),wm);w.rotation.x=Math.PI/2;w.position.set(p[0],0.35,p[1]);g.add(w)});
+  g.position.copy(W2(x,y));g.rotation.y=rot;scene.add(g)}
+car(22,6,Math.PI/2,0xC9CED3);car(22,-1,Math.PI/2,0x2F5D8C);
+
+const OP={x:-20.5,y:-11};
+(function(){const g=new THREE.Group();const tb=new THREE.Mesh(new THREE.BoxGeometry(1.1,0.05,0.7),new THREE.MeshStandardMaterial({color:0x8A8F94}));tb.position.y=0.75;tb.castShadow=true;g.add(tb);
+  [[0.5,0.3],[0.5,-0.3],[-0.5,0.3],[-0.5,-0.3]].forEach(p=>{const l=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,0.75),tb.material);l.position.set(p[0],0.375,p[1]);g.add(l)});
+  const lb=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.03,0.34),new THREE.MeshStandardMaterial({color:0x2B2E33}));lb.position.set(0,0.79,0);g.add(lb);
+  const sc=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.32,0.02),new THREE.MeshStandardMaterial({color:0x2B2E33,emissive:0x1E6FD9,emissiveIntensity:0.6}));sc.position.set(0,0.95,-0.17);sc.rotation.x=-0.25;g.add(sc);
+  const body=new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.26,1.0,16),new THREE.MeshStandardMaterial({color:0x2E6FB5}));body.position.set(0,1.0,0.65);body.castShadow=true;g.add(body);
+  const legs=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.18,0.55,16),new THREE.MeshStandardMaterial({color:0x2A2D33}));legs.position.set(0,0.27,0.65);g.add(legs);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.16,16,16),new THREE.MeshStandardMaterial({color:0xC99A78}));head.position.set(0,1.68,0.65);head.castShadow=true;g.add(head);
+  g.position.copy(W2(OP.x,OP.y));g.rotation.y=Math.PI*0.15;scene.add(g);
+  const lab=makeLabel('Operator (UI)','#1E4F86');lab.position.copy(W2(OP.x,OP.y,2.3));scene.add(lab)})();
+const LAPTOP=W2(OP.x,OP.y,0.95);
+
+function makeLabel(text,bg){const c=document.createElement('canvas');c.width=256;c.height=64;const x=c.getContext('2d');
+  x.font='600 30px Barlow, system-ui, sans-serif';const w=Math.min(250,x.measureText(text).width+24);x.fillStyle=bg||'rgba(16,22,21,0.82)';
+  const r=12,X=(256-w)/2;x.beginPath();x.moveTo(X+r,6);x.arcTo(X+w,6,X+w,58,r);x.arcTo(X+w,58,X,58,r);x.arcTo(X,58,X,6,r);x.arcTo(X,6,X+w,6,r);x.fill();
+  x.fillStyle='#fff';x.textAlign='center';x.textBaseline='middle';x.fillText(text,128,33);
+  const t=new THREE.CanvasTexture(c);t.anisotropy=4;const m=new THREE.SpriteMaterial({map:t,depthTest:false});const s=new THREE.Sprite(m);s.scale.set(2.4,0.6,1);s.renderOrder=10;return s}
+function setLabel(s,text,bg){const n=makeLabel(text,bg);s.material.map.dispose();s.material.map=n.material.map;s.material.needsUpdate=true}
+
+const ORANGE=0xFF6A13;
+function buildCone(id){const g=new THREE.Group(),tilt=new THREE.Group();g.add(tilt);
+  const base=new THREE.Mesh(new THREE.BoxGeometry(0.8,0.12,0.8),new THREE.MeshStandardMaterial({color:0x1C1C1C,roughness:0.9}));base.position.y=0.06;base.castShadow=true;tilt.add(base);
+  const bodyMat=new THREE.MeshStandardMaterial({color:ORANGE,roughness:0.55});
+  const body=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.34,0.95,28),bodyMat);body.position.y=0.12+0.475;body.castShadow=true;tilt.add(body);
+  const white=new THREE.MeshStandardMaterial({color:0xF4F4F0,roughness:0.35,emissive:0x222222});
+  [0.42,0.68].forEach(h=>{const r=b=>0.34-0.27*(b/0.95)+0.004;const s=new THREE.Mesh(new THREE.CylinderGeometry(r(h+0.07),r(h-0.07),0.14,28,1,true),white);s.position.y=0.12+h;tilt.add(s)});
+  const lamp=new THREE.Mesh(new THREE.SphereGeometry(0.075,16,16),new THREE.MeshStandardMaterial({color:0x4AA3FF,emissive:0x4AA3FF,emissiveIntensity:1}));lamp.position.y=1.13;tilt.add(lamp);
+  const ant=new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.012,0.35),new THREE.MeshStandardMaterial({color:0x222222}));ant.position.set(-0.25,0.3,0.25);tilt.add(ant);
+  const arrow=new THREE.Mesh(new THREE.ConeGeometry(0.09,0.24,3),new THREE.MeshStandardMaterial({color:0xFFD23F,emissive:0x664D00}));
+  arrow.rotation.z=-Math.PI/2;arrow.position.set(0.5,0.08,0);tilt.add(arrow);
+  const lab=makeLabel('Cone '+id);lab.position.y=1.75;g.add(lab);
+  scene.add(g);return{g,tilt,lamp,lab,bodyMat}}
+
+const markerGroup=new THREE.Group();scene.add(markerGroup);
+const outlineGroup=new THREE.Group();scene.add(outlineGroup);
+const fx=[];
+const msgGeo=new THREE.SphereGeometry(0.13,12,12),ringGeo=new THREE.RingGeometry(0.45,0.58,40);
+function sendMsg(from,to,color,dur=0.7){const m=new THREE.Mesh(msgGeo,new THREE.MeshBasicMaterial({color}));scene.add(m);
+  fx.push({type:'msg',m,from:from.clone?()=>from:from,to:to.clone?()=>to:to,t:0,dur});}
+function pulse(pos,color,max=2.2,dur=0.9,op=0.8){const m=new THREE.Mesh(ringGeo,new THREE.MeshBasicMaterial({color,transparent:true,opacity:op,side:THREE.DoubleSide,depthWrite:false}));
+  m.rotation.x=-Math.PI/2;m.position.copy(pos);m.position.y=0.03;scene.add(m);fx.push({type:'ring',m,t:0,dur,max,op})}
+
+let cones=[],simT=0,timers=[],busy=false,agent=null,plan=null,phase='idle',tStart=0,formedAt=null,lastHB=0;
+const VMAX=0.8,VNEAR=0.3,RAD=0.5;
+function after(dt,fn){timers.push({t:simT+dt,fn})}
+const conePos=c=>W2(c.x,c.y,0.9);
+function log(text,cls){const d=document.createElement('div');d.className=cls||'';d.textContent=`[${simT.toFixed(1)} s] ${text}`;const L=$('log');L.appendChild(d);
+  while(L.children.length>120)L.removeChild(L.firstChild);L.scrollTop=L.scrollHeight}
+function setPhase(p){phase=p;$('phase').textContent='Phase: '+p}
+function banner(text,kind){const b=$('banner');if(!text){b.style.display='none';return}b.style.display='block';b.textContent=text;
+  b.style.background=kind==='bad'?'var(--danger-soft)':kind==='warn'?'var(--warn-soft)':'var(--ok-soft)';b.style.color=kind==='bad'?'var(--danger)':kind==='warn'?'var(--warn)':'var(--ok)'}
+
+function reset(){cones.forEach(c=>scene.remove(c.v.g));cones=[];timers=[];busy=false;agent=null;plan=null;formedAt=null;clearMarkers();clearOutline();banner('');
+  fx.forEach(f=>scene.remove(f.m));fx.length=0;
+  const n=+$('n').value;const pts=[];let guard=0;
+  while(pts.length<n&&guard++<5000){const p={x:-16+Math.random()*12,y:-12+Math.random()*5};if(pts.every(q=>Math.hypot(q.x-p.x,q.y-p.y)>1.8))pts.push(p)}
+  pts.forEach((p,i)=>{const v=buildCone(i+1);cones.push({id:i+1,x:p.x,y:p.y,th:Math.random()*Math.PI*2,vx:0,vy:0,tx:null,ty:null,tth:0,role:null,state:'idle',v,tiltA:0,settle:0,sats:13+Math.floor(Math.random()*6)})});
+  setPhase('idle');$('log').innerHTML='';log(`Fleet of ${n} cones powered on. Each cone has its own GPS (RTK) and its own software. Mesh radio network formed.`,'ok');refreshLabels();renderTable()}
+
+function shapePts(n){const a=+$('side').value,ax=+$('ax').value,ay=+$('ay').value,h=(+$('hd').value)*Math.PI/180,kind=$('shape').value;
+  const u=[Math.cos(h),Math.sin(h)],v=[-Math.sin(h),Math.cos(h)];const P=(s,t,label)=>({x:ax+u[0]*s+v[0]*t,y:ay+u[1]*s+v[1]*t,label});
+  if(kind==='line'){if(n<2)return null;return [...Array(n)].map((_,i)=>P(a*i/(n-1),0,i===0?'A':String.fromCharCode(65+i)))}
+  if(n<4)return null;const b=kind==='rect'?a/2:a;
+  const C=[P(0,0,'A'),P(a,0,'B'),P(a,b,'C'),P(0,b,'D')];const sides=[[0,1],[2,3],[1,2],[3,0]];const k=[0,0,0,0];for(let i=0;i<n-4;i++)k[i%4]++;
+  const out=C.slice();sides.forEach((s,si)=>{for(let j=1;j<=k[si];j++){const f=j/(k[si]+1);const p=C[s[0]],q=C[s[1]];
+    out.push({x:p.x+(q.x-p.x)*f,y:p.y+(q.y-p.y)*f,label:C[s[0]].label+C[s[1]].label+(k[si]>1?j:'')})}});return out}
+
+function alive(){return cones.filter(c=>c.state!=='failed')}
+function auction(pool,pts){const assign=new Map(),free=new Set(pts.map((_,i)=>i)),un=new Set(pool.map(c=>c.id)),rounds=[];
+  while(un.size&&free.size){const bids=new Map();
+    for(const id of un){const c=cones[id-1];let best=null,bd=1e9;for(const i of free){const d=Math.hypot(c.x-pts[i].x,c.y-pts[i].y);if(d<bd){bd=d;best=i}}
+      const cur=bids.get(best);if(!cur||bd<cur.d-1e-9||(Math.abs(bd-cur.d)<1e-9&&id<cur.id))bids.set(best,{id,d:bd})}
+    const won=[];for(const [i,b] of bids){assign.set(b.id,i);un.delete(b.id);free.delete(i);won.push(`${pts[i].label}→cone ${b.id} (${b.d.toFixed(1)} m)`)}
+    rounds.push(won)}
+  return{assign,rounds,spare:[...un]}}
+
+function clearMarkers(){while(markerGroup.children.length)markerGroup.remove(markerGroup.children[0])}
+function clearOutline(){while(outlineGroup.children.length)outlineGroup.remove(outlineGroup.children[0])}
+function drawMarkers(pts){clearMarkers();const mat=new THREE.MeshBasicMaterial({color:0x8E7CF0,transparent:true,opacity:0.85,side:THREE.DoubleSide});
+  pts.forEach(p=>{const r=new THREE.Mesh(new THREE.RingGeometry(0.5,0.62,40),mat);r.rotation.x=-Math.PI/2;r.position.copy(W2(p.x,p.y,0.02));markerGroup.add(r);
+    const l=makeLabel(p.label,'rgba(91,79,196,0.9)');l.scale.set(1.6,0.4,1);l.position.copy(W2(p.x,p.y,0.35));markerGroup.add(l)})}
+function drawOutline(pts){clearOutline();const kind=$('shape').value;const mat=new THREE.MeshBasicMaterial({color:0xFFD23F,transparent:true,opacity:0.9});
+  const C=kind==='line'?pts:pts.slice(0,4);const seq=kind==='line'?C.slice():C.concat([C[0]]);
+  for(let i=0;i<seq.length-1;i++){const p=seq[i],q=seq[i+1];const L=Math.hypot(q.x-p.x,q.y-p.y);const m=new THREE.Mesh(new THREE.PlaneGeometry(L,0.09),mat);
+    m.rotation.x=-Math.PI/2;m.rotation.z=Math.atan2(q.y-p.y,q.x-p.x);m.position.copy(W2((p.x+q.x)/2,(p.y+q.y)/2,0.018));outlineGroup.add(m)}}
+
+function refreshLabels(){cones.forEach(c=>{let t='Cone '+c.id;if(c.role!=null&&plan)t+=' · '+plan.pts[c.role].label;if(agent===c.id)t+=' · agent';
+  if(c.state==='failed')t='Cone '+c.id+' · failed';setLabel(c.v.lab,t,c.state==='failed'?'rgba(179,38,30,0.9)':agent===c.id?'rgba(91,79,196,0.92)':'rgba(16,22,21,0.82)')})}
+function renderTable(){$('tbl').innerHTML=cones.map(c=>{const role=c.state==='failed'?'–':(c.role!=null&&plan?plan.pts[c.role].label:'spare');
+  const gps=c.state==='failed'?'lost':`RTK ±2 cm, ${c.sats} sats`;
+  return `<tr><td>${c.id}${agent===c.id?' (agent)':''}</td><td>${role}</td><td>${gps}</td><td><span class="pill p-${c.state}">${c.state}</span></td></tr>`}).join('')}
+
+function validate(){const pts=shapePts(Math.max(4,alive().length));if(!pts)return'Not enough cones for this shape.';
+  for(const p of pts)if(Math.abs(p.x)>17.4||Math.abs(p.y)>12.4)return`Point ${p.label} (${p.x.toFixed(1)}, ${p.y.toFixed(1)}) is outside the pad (±18 × ±13 m). Move corner A or reduce a.`;
+  const s=+$('side').value;if(!(s>=4&&s<=16))return'Side a must be between 4 and 16 m.';return''}
+
+function electAgent(reason){const al=alive();if(!al.length){agent=null;return}
+  if(reason==='operator'){let best=al[0],bd=1e9;al.forEach(c=>{const d=Math.hypot(c.x-OP.x,c.y-OP.y);if(d<bd){bd=d;best=c}});agent=best.id}
+  else{agent=Math.min(...al.map(c=>c.id))}}
+
+function sendCommand(){$('err').textContent='';if(busy){$('err').textContent='The cones are still negotiating. Wait a moment.';return}
+  const e=validate();if(e){$('err').textContent=e;return}
+  busy=true;banner('');clearOutline();formedAt=null;
+  if(agent==null||cones[agent-1].state==='failed')electAgent('operator');
+  const a=+$('side').value,ax=+$('ax').value,ay=+$('ay').value,hd=+$('hd').value,kind=$('shape').selectedOptions[0].text.toLowerCase();
+  setPhase('command');log(`Operator → cone ${agent} (agent): FORM ${kind.toUpperCase()}, a = ${a} m, A = (${ax}, ${ay}), heading ${hd}°`,'op');
+  sendMsg(LAPTOP,()=>conePos(cones[agent-1]),0x378ADD,1.0);pulse(W2(OP.x,OP.y),0x378ADD,2.5);refreshLabels();renderTable();
+  after(1.1,()=>negotiate('command'))}
+
+function negotiate(why){const al=alive();const ag=cones[agent-1];const pts=shapePts(al.length);
+  if(!pts){setPhase('degraded');log(`Only ${al.length} working cones left: not enough for this shape. Holding positions and alerting the operator.`,'bad');
+    sendMsg(()=>conePos(ag),LAPTOP,0xE24B4A,1.0);banner(`Not enough cones (${al.length}) to form the shape`,'bad');busy=false;return}
+  setPhase('broadcast');log(`Agent cone ${agent} ${why==='command'?'broadcasts the task':'broadcasts a new plan'} to ${al.length-1} cones: ${pts.length} positions to fill.`,'ag');
+  al.forEach(c=>{if(c.id!==agent)sendMsg(()=>conePos(ag),()=>conePos(c),0x8E7CF0,0.8)});pulse(W2(ag.x,ag.y),0x8E7CF0,3);
+  after(1.0,()=>{setPhase('bidding');log('Every cone computes its own distance to each free position and broadcasts its bid.','ag');
+    al.forEach(a=>al.forEach(b=>{if(a!==b)sendMsg(()=>conePos(a),()=>conePos(b),0x8E7CF0,0.7)}));
+    const res=auction(al,pts);let d=0.9;
+    res.rounds.forEach((r,i)=>{after(d,()=>log(`Bid round ${i+1}: ${r.join(', ')}`,'ag'));d+=0.6});
+    after(d,()=>{setPhase('consensus');plan={pts};cones.forEach(c=>c.role=null);
+      for(const [id,i] of res.assign){const c=cones[id-1];c.role=i;c.tx=pts[i].x;c.ty=pts[i].y;c.tth=(+$('hd').value)*Math.PI/180;c.state='moving';c.settle=0}
+      res.spare.forEach(id=>{const c=cones[id-1];if(c.state!=='failed'){c.state='idle'}});
+      log(`Consensus: all cones hold the same plan.${res.spare.length?' Spare: cone '+res.spare.join(', ')+'.':''} Each cone now drives itself.`,'ok');
+      drawMarkers(pts);refreshLabels();renderTable();setPhase('moving');tStart=simT;busy=false})})}
+
+function breakCone(){$('err').textContent='';if(busy){$('err').textContent='Wait until the cones finish negotiating.';return}
+  const cand=cones.filter(c=>c.state==='holding'||c.state==='moving');if(!cand.length){$('err').textContent='Send a command first so the cones have roles.';return}
+  const c=cand[Math.floor(Math.random()*cand.length)];c.state='failed';c.vx=c.vy=0;const wasAgent=agent===c.id;
+  log(`Cone ${c.id} hit and disabled (radio and GPS silent).`,'bad');pulse(W2(c.x,c.y),0xE24B4A,3,1.2);banner(`Cone ${c.id} lost`,'bad');refreshLabels();renderTable();busy=true;setPhase('fault');
+  after(1.6,()=>{log(`Neighbours missed 3 heartbeats from cone ${c.id}. It is removed from the fleet.`,'bad');
+    if(wasAgent){electAgent('election');log(`The agent was lost. Leader election: cone ${agent} becomes the new agent.`,'ag');pulse(W2(cones[agent-1].x,cones[agent-1].y),0x8E7CF0,3)}
+    refreshLabels();after(0.8,()=>{log('Re-planning the shape with the remaining cones.','ag');banner('Re-planning','warn');clearOutline();formedAt=null;negotiate('fault')})})}
+
+function repair(){if(busy){$('err').textContent='Wait until the cones finish negotiating.';return}
+  const f=cones.filter(c=>c.state==='failed');if(!f.length){$('err').textContent='No broken cones to repair.';return}$('err').textContent='';
+  f.forEach(c=>{c.state='idle';c.tiltA=0;c.role=null;log(`Cone ${c.id} set upright, self-test OK, rejoins the network.`,'ok');pulse(W2(c.x,c.y),0x3CC6E0,2.5)});
+  refreshLabels();renderTable();if(plan){busy=true;if(agent==null||cones[agent-1].state==='failed')electAgent('election');banner('Re-planning','warn');clearOutline();formedAt=null;after(1.0,()=>negotiate('fault'))}}
+
+function step(dt){simT+=dt;
+  for(let i=timers.length-1;i>=0;i--)if(simT>=timers[i].t){const t=timers.splice(i,1)[0];t.fn()}
+  if(simT-lastHB>1.2){lastHB=simT;alive().forEach(c=>pulse(W2(c.x,c.y),0x3CC6E0,1.4,0.7,0.45))}
+  for(const c of cones){
+    if(c.state==='failed'){c.tiltA=Math.min(Math.PI/2*0.92,c.tiltA+dt*3);continue}
+    if(c.state!=='moving'||phase==='fault'&&false)continue;
+    const dx=c.tx-c.x,dy=c.ty-c.y,d=Math.hypot(dx,dy);
+    const v=d<1?Math.max(0.06,VNEAR*Math.min(1,d/0.4)):VMAX;let ux=dx/(d||1)*v,uy=dy/(d||1)*v;
+    for(const o of cones){if(o===c)continue;const ox=c.x-o.x,oy=c.y-o.y,od=Math.hypot(ox,oy),R=2*RAD+0.7;
+      if(od<R&&od>1e-3){const k=(R-od)/R;const nx=ox/od,ny=oy/od;ux+=nx*k*1.3-ny*k*0.7;uy+=ny*k*1.3+nx*k*0.7}}
+    let sp=Math.hypot(ux,uy);if(sp>VMAX){ux*=VMAX/sp;uy*=VMAX/sp}
+    c.vx+=(ux-c.vx)*Math.min(1,dt*5);c.vy+=(uy-c.vy)*Math.min(1,dt*5);c.x+=c.vx*dt;c.y+=c.vy*dt;
+    if(Math.hypot(c.vx,c.vy)>0.05){const want=Math.atan2(c.vy,c.vx);const e=Math.atan2(Math.sin(want-c.th),Math.cos(want-c.th));c.th+=Math.max(-2.5*dt,Math.min(2.5*dt,e))}
+    if(d<0.07){c.vx*=0.5;c.vy*=0.5;c.settle+=dt;const e=Math.atan2(Math.sin(c.tth-c.th),Math.cos(c.tth-c.th));c.th+=Math.max(-1.5*dt,Math.min(1.5*dt,e));
+      if(c.settle>1&&Math.abs(e)<0.1){c.state='holding';c.x=c.tx;c.y=c.ty;c.vx=c.vy=0;log(`Cone ${c.id} holding ${plan.pts[c.role].label}, heading ${Math.round(c.tth*180/Math.PI)}°.`);renderTable()}}else c.settle=0}
+  if(phase==='moving'&&plan&&cones.every(c=>c.state!=='moving')){setPhase('formed');formedAt=simT-tStart;drawOutline(plan.pts);
+    log(`Shape complete in ${formedAt.toFixed(1)} s. Agent cone ${agent} reports READY to the operator.`,'ok');sendMsg(()=>conePos(cones[agent-1]),LAPTOP,0x1E6B3A,1.0);
+    banner(`READY: shape formed in ${formedAt.toFixed(1)} s`,'ok')}
+  for(let i=fx.length-1;i>=0;i--){const f=fx[i];f.t+=dt/f.dur;
+    if(f.type==='msg'){const a=f.from(),b=f.to();const t=Math.min(1,f.t);f.m.position.lerpVectors(a,b,t);f.m.position.y+=Math.sin(Math.PI*t)*1.2}
+    else{const s=1+(f.max-1)*f.t;f.m.scale.set(s,s,s);f.m.material.opacity=f.op*(1-f.t)}
+    if(f.t>=1){scene.remove(f.m);f.m.material.dispose();fx.splice(i,1)}}
+}
+
+function syncMeshes(){const now=performance.now();cones.forEach(c=>{c.v.g.position.copy(W2(c.x,c.y));c.v.g.rotation.y=c.th;c.v.tilt.rotation.x=c.tiltA;c.v.tilt.position.y=c.tiltA?0.3*Math.sin(c.tiltA):0;
+  const col=c.state==='failed'?0xE24B4A:c.state==='moving'?((Math.floor(now/250)%2)?0xFFB020:0x553300):c.state==='holding'?0x3BD16F:0x4AA3FF;
+  c.v.lamp.material.color.setHex(col);c.v.lamp.material.emissive.setHex(col)})}
+
+let cam={r:44,th:-0.55,ph:0.95,tgt:new THREE.Vector3(-1,0,0)},camGoal=null;
+function placeCam(){const p=cam.ph;camera.position.set(cam.tgt.x+cam.r*Math.sin(p)*Math.sin(cam.th),cam.r*Math.cos(p),cam.tgt.z+cam.r*Math.sin(p)*Math.cos(cam.th));camera.lookAt(cam.tgt)}
+const ptrs=new Map();let pinch0=0;
+stage.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;stage.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});camGoal=null;
+  if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinch0=Math.hypot(a.x-b.x,a.y-b.y)}});
+stage.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;const p=ptrs.get(e.pointerId);
+  if(ptrs.size===1){cam.th-=(e.clientX-p.x)*0.006;cam.ph=Math.max(0.05,Math.min(1.45,cam.ph-(e.clientY-p.y)*0.005))}
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===2){const [a,b]=[...ptrs.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch0){cam.r=Math.max(12,Math.min(90,cam.r*pinch0/d))}pinch0=d}});
+['pointerup','pointercancel'].forEach(t=>stage.addEventListener(t,e=>{ptrs.delete(e.pointerId);pinch0=0}));
+stage.addEventListener('wheel',e=>{e.preventDefault();cam.r=Math.max(12,Math.min(90,cam.r*(1+e.deltaY*0.001)))},{passive:false});
+$('vTop').onclick=()=>camGoal={r:46,th:0,ph:0.02};$('vOrbit').onclick=()=>camGoal={r:44,th:-0.55,ph:0.95};
+
+function resize(){const w=stage.clientWidth,h=stage.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
+window.addEventListener('resize',resize);
+
+$('send').onclick=sendCommand;$('brk').onclick=breakCone;$('fix').onclick=repair;$('reset').onclick=reset;
+['side','ax','ay','hd','shape'].forEach(id=>$(id).addEventListener('input',()=>$('err').textContent=''));
+
+reset();resize();
+let last=performance.now();
+function loop(now){const sp=+$('spd').value;let dt=Math.min(0.05,(now-last)/1000)*sp;last=now;const n=Math.ceil(dt/0.01)||1;for(let i=0;i<n;i++)step(dt/n);
+  if(camGoal){const k=0.08;cam.r+=(camGoal.r-cam.r)*k;cam.ph+=(camGoal.ph-cam.ph)*k;let e=Math.atan2(Math.sin(camGoal.th-cam.th),Math.cos(camGoal.th-cam.th));cam.th+=e*k;
+    if(Math.abs(camGoal.r-cam.r)<0.05&&Math.abs(camGoal.ph-cam.ph)<0.002&&Math.abs(e)<0.002)camGoal=null}
+  $('clock').textContent=`t = ${(phase==='moving'?simT-tStart:formedAt!=null?formedAt:0).toFixed(1)} s`;
+  syncMeshes();placeCam();renderer.render(scene,camera);requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
