@@ -156,9 +156,12 @@ function step(dt){
     const dx=c.tx-c.x,dy=c.ty-c.y,d=Math.hypot(dx,dy);
     const v=d<1?Math.max(0.08,VNEAR*Math.min(1,d/0.4)):VMAX;
     let ux=dx/(d||1)*v,uy=dy/(d||1)*v;
+    // Give-way range shrinks to a hard minimum near the cone's own slot, so tightly
+    // spaced slots (gather row, 1.1 m) don't push each other away forever.
+    const near=Math.min(1,d/1.5),RAV=0.8+(2*R+0.6-0.8)*near;
     for(const o of cones){if(o===c||o.state==='tipped')continue;
       const ox=c.x-o.x,oy=c.y-o.y,od=Math.hypot(ox,oy);
-      if(od<2*R+0.6&&od>1e-3){const k=(2*R+0.6-od)/(2*R+0.6);const nx=ox/od,ny=oy/od;ux+=nx*k*1.2-ny*k*0.7;uy+=ny*k*1.2+nx*k*0.7}}
+      if(od<RAV&&od>1e-3){const k=(RAV-od)/RAV;const nx=ox/od,ny=oy/od;ux+=nx*k*1.2-ny*k*0.7*near;uy+=ny*k*1.2+nx*k*0.7*near}}
     let sp=Math.hypot(ux,uy);if(sp>VMAX){ux*=VMAX/sp;uy*=VMAX/sp}
     c.vx+=(ux-c.vx)*Math.min(1,dt*6);c.vy+=(uy-c.vy)*Math.min(1,dt*6);
     c.x+=c.vx*dt;c.y+=c.vy*dt;
